@@ -24,7 +24,7 @@ Unlike the built-in `uk_transport` integration, this custom component provides d
 The sensor state represents the minutes until the next departure. The attributes contain rich journey data:
 
 ```yaml
-journey_start: AUD
+journey_start: CBG
 journey_end: LST
 next_trains:
   - origin_name: Cambridge
@@ -46,7 +46,7 @@ next_trains:
     status: Delayed
 unit_of_measurement: min
 icon: mdi:train
-friendly_name: Next train from AUD to LST
+friendly_name: Next train from CBG to LST
 ```
 
 *You will also get a standalone `sensor.rtt_api_lifetime_calls` entity that tracks your total hits and exposes your real-time server limits as attributes!*
