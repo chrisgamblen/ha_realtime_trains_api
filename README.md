@@ -87,7 +87,7 @@ sensor:
       minutes: 60 
 
     queries:
-      - origin: AUD # Start station CRS code
+      - origin: CBG # Start station CRS code
         destination: LST # End station CRS code
         
         # journey_data_for_next_X_trains is optional but highly recommended.
@@ -95,10 +95,10 @@ sensor:
         journey_data_for_next_X_trains: 4 
         
         stops_of_interest:
-          - TOM # Adds specific timing data if the train calls at this intermediate station
+          - BIS # Adds specific timing data if the train calls at this intermediate station
           
       - origin: LST
-        destination: AUD
+        destination: CBG
         sensor_name: Train Home # Forces entity ID to 'sensor.train_home'
         time_offset:
           minutes: 15 # Hides departures leaving in less than 15 mins (useful for walk-time)
