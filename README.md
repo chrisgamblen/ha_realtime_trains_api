@@ -1,6 +1,10 @@
 # realtime_trains_api
 api.rtt.io Home Assistant integration
 
+
+UPDATE: June 2026, code refactored to support updated API from RTT.io with significant lifting done by AI.
+
+
 It provides detailed live train departures and journey stats:
 
 ```yaml
