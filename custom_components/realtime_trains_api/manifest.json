@@ -1,5 +1,5 @@
 {
-  "domain": "realtime_trains",
+  "domain": "realtime_trains_api",
   "name": "Realtime Trains API",
   "version": "1.0.0",
   "documentation": "https://github.com/chrisgamblen/ha_realtime_trains_api",
