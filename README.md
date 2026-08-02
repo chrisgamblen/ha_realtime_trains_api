@@ -1,90 +1,105 @@
-# realtime_trains_api
-api.rtt.io Home Assistant integration
+# Realtime Trains API for Home Assistant
 
+This Home Assistant integration provides detailed live train departures, journey stats, delay tracking, and cancellation detection using the UK railway data system.
 
-UPDATE: June 2026, code refactored to support updated API from RTT.io with significant lifting done by AI.
+> **UPDATE (June 2026):** This repository is a heavily modified and modernized fork of the original `realtime_trains_api` created by [megakid](https://github.com/megakid). The code has been completely refactored (with some heavy lifting from AI!) to support the modern `data.rtt.io` v2 API token authentication, rate limit tracking, and advanced schedule logic. 
 
+This integration is made possible by the brilliant Realtime Trains API ([data.rtt.io](https://data.rtt.io) / [realtimetrains.co.uk](https://www.realtimetrains.co.uk)), maintained by Tom Cairns under swlines Ltd ([@swlines](https://twitter.com/swlines)).
 
-It provides detailed live train departures and journey stats:
+---
+
+## 🌟 Features
+
+Unlike the built-in `uk_transport` integration, this custom component provides deep journey details:
+* **Live Status:** Tracks delays and catches hidden partial cancellations natively.
+* **Journey Data:** Calculates journey time, arrival times, and tracks stops of interest.
+* **Rate Limit Tracking:** Automatically pulls server-side rate limits (minute/hour/day/week) into a dedicated API counter sensor to prevent you from being blocked.
+* **Quiet Hours:** Define periods (e.g., overnight) where API polling slows down to save your daily quota.
+* **Time Offsets:** Ignore trains leaving in the next few minutes if you still need time to walk to the station.
+
+---
+
+## 📊 Example Output
+
+The sensor state represents the minutes until the next departure. The attributes contain rich journey data:
 
 ```yaml
-station_code: WAT
-calling_at: WAL
+journey_start: AUD
+journey_end: LST
 next_trains:
-  - origin_name: London Waterloo
-    destination_name: Basingstoke
-    service_uid: Q46478
-    scheduled: 21-01-2022 20:12
-    estimated: 21-01-2022 20:12
-    minutes: 3
-    platform: '10'
-    operator_name: South Western Railway
+  - origin_name: Cambridge
+    destination_name: London Liverpool Street
+    service_uid: P76252
+    scheduled: 30-07-2026 07:38
+    estimated: 30-07-2026 07:53
+    delay: 15
+    minutes: 7
+    platform: '1'
+    operator_name: Greater Anglia
+    is_origin_cancelled: false
     stops_of_interest: []
-    scheduled_arrival: 21-01-2022 20:37
-    estimate_arrival: 21-01-2022 20:36
-    journey_time_mins: 24
-    stops: 2
-  - origin_name: London Waterloo
-    destination_name: Woking
-    service_uid: Q46174
-    scheduled: 21-01-2022 20:20
-    estimated: 21-01-2022 20:20
-    minutes: 11
-    platform: '4'
-    operator_name: South Western Railway
-    stops_of_interest:
-      - stop: VXH
-        name: Vauxhall
-        scheduled_stop: 21-01-2022 20:23
-        estimate_stop: 21-01-2022 20:23
-        journey_time_mins: 3
-        stops: 0
-    scheduled_arrival: 21-01-2022 20:54
-    estimate_arrival: 21-01-2022 20:53
-    journey_time_mins: 33
-    stops: 7
+    scheduled_arrival: 30-07-2026 08:45
+    estimate_arrival: 30-07-2026 08:45
+    arrival_delay: 0
+    journey_time_mins: 52
+    stops: 4
+    status: Delayed
 unit_of_measurement: min
 icon: mdi:train
-friendly_name: Next Waterloo train data
+friendly_name: Next train from AUD to LST
 ```
 
-This Home Assistant integration is only made possible by the brilliant Realtime Trains API (https://api.rtt.io also see https://www.realtimetrains.co.uk) which is maintained by Tom Cairns under swlines Ltd (https://twitter.com/swlines).
+*You will also get a standalone `sensor.rtt_api_lifetime_calls` entity that tracks your total hits and exposes your real-time server limits as attributes!*
 
-Alternatively, you can use the built-in `uk_transport` integration (see https://www.home-assistant.io/integrations/uk_transport/).  NOTE: Unlike this `realtime_trains_api` integration, `uk_transport` cannot provide additional journey details such as stops, journey durations and arrival times.
+---
 
-# Guide
+## 🛠️ Installation & Getting your Token
 
-## Installation & Usage
+1. Create an RTT unified login account and sign in to the Developer Portal at [api-portal.rtt.io](https://api-portal.rtt.io/).
+2. On the **API Dashboard**, look under "Your current tokens" and click on your active token ID link. *(If you do not have one, click "Request new token" first)*.
+3. On the **Token Details** page, scroll down to the "API Authorisation" section. 
+4. Click the **Copy** button to grab the long token string (it begins with `eyJ...`). *This is the `api_token` you will paste into your Home Assistant configuration.*
+5. In Home Assistant, navigate to **HACS > Integrations**.
+6. Click the three dots in the top right and select **Custom repositories**.
+7. Add `https://github.com/chrisgamblen/ha_realtime_trains_api` as an **Integration**.
+8. Click **Download** on the Realtime Trains API repository.
+9. Restart Home Assistant.
 
-1. Signup to https://api.rtt.io/ and retrieve your API Auth Credentials.
-2. Add repository to HACS (see https://hacs.xyz/docs/faq/custom_repositories) - use "https://github.com/megakid/ha_realtime_trains_api" as the repository URL.
-3. Install the `realtime_trains_api` integration inside HACS
-4. To your HA `configuration.yaml`, add the following:
+---
+
+## ⚙️ Configuration
+
+Add the following to your `configuration.yaml` file. 
+
 ```yaml
 sensor:
-  - platform: realtime_trains_api
-    username: '[Your RTT API Auth Credentials username]'
-    password: '[Your RTT API Auth Credentials password]' # (recommended to use '!secret my_rtt_password' and add to secrets.yaml)
+  - platform: realtime_trains
+    api_token: '[Your Long-Lived JWT Token Here]' # Highly recommended to use !secret
     scan_interval:
-      seconds: 90 # this defaults to 60 seconds (in HA) so you can change this.  Dont set it too frequent or you might get blocked for abuse of the RTT API.
-    auto_adjust_scans: true # If no depatures are retrieved, back off polling interval to 30 mins (until there are some trains)
+      seconds: 90 # Defaults to 60. Don't set too frequently to avoid hitting rate limits.
+    auto_adjust_scans: true # Backs off polling to 30 mins if no departures are found
+    timewindow: 120 # Search window in minutes (Default: 120)
+    
+    # Optional: Slow down polling during the night to save API calls
+    quiet_start: '23:30:00'
+    quiet_end: '06:00:00'
+    quiet_interval:
+      minutes: 60 
+
     queries:
-      - origin: WAL
-        destination: WAT
-        # journey_data_for_next_X_trains is optional but highly recommended, 
-        # Defaults to 0. 
-        # Entering 5 here means the first 5 departures from the origin 
-        # (WAL in this case) to destination (WAT in this case) will hit 
-        # the API to lookup the number of stops, journey time and estimated
-        # arrival time to the destination (WAT in this case).
-        journey_data_for_next_X_trains: 5 
+      - origin: AUD # Start station CRS code
+        destination: LST # End station CRS code
+        
+        # journey_data_for_next_X_trains is optional but highly recommended.
+        # It queries individual train itineraries to calculate arrival times and delays.
+        journey_data_for_next_X_trains: 4 
+        
         stops_of_interest:
-          - VXH # a stop_of_interest will add data about this stop to each train's data (only if journey_data is gathered for that journey).  Means you can add more context to the train journey (e.g. my commute can start at two stops for some trains, only one for others meaning it might change my choice of train if I can get on at VXH instead of WAT)
-      - origin: WAT
-        destination: WAL
-        sensor_name: My Custom Journey # this will appear as 'sensor.my_custom_journey'
+          - TOM # Adds specific timing data if the train calls at this intermediate station
+          
+      - origin: LST
+        destination: AUD
+        sensor_name: Train Home # Forces entity ID to 'sensor.train_home'
         time_offset:
-          minutes: 20 # This will display departures from now+20 minutes - useful if the station is 20 minutes travel/walk away.
+          minutes: 15 # Hides departures leaving in less than 15 mins (useful for walk-time)
 ```
-5. Restart HA
-6. Your `sensor` will be named something like `sensor.next_train_from_wal_to_wat` (unless you specified a `sensor_name`) for each query you defined in your configuration.
