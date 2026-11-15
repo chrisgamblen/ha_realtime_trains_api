@@ -1,7 +1,7 @@
 {
   "domain": "realtime_trains_api",
   "name": "Realtime Trains API",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "documentation": "https://github.com/chrisgamblen/ha_realtime_trains_api",
   "issue_tracker": "https://github.com/chrisgamblen/ha_realtime_trains_api/issues",
   "codeowners": ["@chrisgamblen"],
