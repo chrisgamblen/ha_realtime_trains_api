@@ -289,8 +289,9 @@ class RealtimeTrainQuotaUsageSensor(SensorEntity):
     def __init__(self, tracker: ApiTracker, period: str) -> None:
         self._tracker = tracker
         self._period = period
-        self._attr_name = f"RTT API {period.capitalize()} Usage"
-        self._attr_unique_id = f"rtt_api_{period}_usage"
+        label = {"day": "Daily", "week": "Weekly"}[period]
+        self._attr_name = f"RTT API {label} Usage"
+        self._attr_unique_id = f"rtt_api_{label.lower()}_usage"
         self._tracker.update_callbacks.append(self._on_api_call)
 
     def _on_api_call(self) -> None:
