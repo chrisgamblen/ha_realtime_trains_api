@@ -11,6 +11,7 @@ from typing import cast
 from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity, RestoreSensor
 from homeassistant.const import (
     UnitOfTime,
+    PERCENTAGE,
     STATE_UNKNOWN,
     CONF_SCAN_INTERVAL,
 )
@@ -20,6 +21,7 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.util import Throttle
+from homeassistant.helpers.event import async_track_time_change
 import homeassistant.util.dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
@@ -134,6 +136,12 @@ async def async_setup_platform(
     # Initialize the shared API tracker and add its dedicated sensor
     api_tracker = ApiTracker()
     sensors_to_add.append(RealtimeTrainApiCounterSensor(api_tracker))
+    sensors_to_add.extend([
+        RealtimeTrainPeriodCallsSensor(api_tracker, "daily"),
+        RealtimeTrainPeriodCallsSensor(api_tracker, "monthly"),
+        RealtimeTrainQuotaUsageSensor(api_tracker, "day"),
+        RealtimeTrainQuotaUsageSensor(api_tracker, "week"),
+    ])
 
     for query in queries:
         sensor_name = query.get(CONF_SENSORNAME, None)
@@ -201,6 +209,103 @@ class RealtimeTrainApiCounterSensor(RestoreSensor):
             attrs[f"limit_{dim}"] = values.get("limit")
             attrs[f"remaining_{dim}"] = values.get("remaining")
         return attrs
+
+
+class RealtimeTrainPeriodCallsSensor(RestoreSensor):
+    """Track API calls made during the current calendar day or month."""
+
+    _attr_icon = "mdi:counter"
+    _attr_native_unit_of_measurement = "calls"
+    _attr_state_class = "total_increasing"
+    _attr_should_poll = False
+
+    def __init__(self, tracker: ApiTracker, period: str) -> None:
+        self._tracker = tracker
+        self._period = period
+        self._attr_name = f"RTT API {period.capitalize()} Calls"
+        self._attr_unique_id = f"rtt_api_{period}_calls"
+        self._period_key = self._current_period()
+        self._baseline = tracker.count
+        self._last_count = tracker.count
+        self._tracker.update_callbacks.append(self._on_api_call)
+
+    def _current_period(self) -> str:
+        today = dt_util.now().date()
+        return today.isoformat() if self._period == "daily" else today.strftime("%Y-%m")
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        previous = await self.async_get_last_state()
+        if previous and previous.attributes.get("period_key") == self._period_key:
+            try:
+                old_count = int(float(previous.state))
+                self._baseline = max(0, self._tracker.count - old_count)
+            except (ValueError, TypeError):
+                self._baseline = self._tracker.count
+        else:
+            self._baseline = self._tracker.count
+        self._last_count = self._tracker.count
+        self.async_on_remove(
+            async_track_time_change(
+                self.hass, self._on_midnight, hour=0, minute=0, second=0
+            )
+        )
+
+    def _on_midnight(self, now: datetime) -> None:
+        if self._current_period() != self._period_key:
+            self._period_key = self._current_period()
+            self._baseline = self._tracker.count
+            self.async_write_ha_state()
+
+    def _on_api_call(self) -> None:
+        new_period = self._current_period()
+        if new_period != self._period_key:
+            self._period_key = new_period
+            # Count the first request in the new period, even if the
+            # scheduled midnight callback has not yet fired.
+            self._baseline = self._last_count
+        self._last_count = self._tracker.count
+        if self.hass:
+            self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> int:
+        return max(0, self._tracker.count - self._baseline)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"period_key": self._period_key}
+
+
+class RealtimeTrainQuotaUsageSensor(SensorEntity):
+    """Expose the percentage of the server-reported API quota consumed."""
+
+    _attr_icon = "mdi:gauge"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = "measurement"
+    _attr_should_poll = False
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, tracker: ApiTracker, period: str) -> None:
+        self._tracker = tracker
+        self._period = period
+        label = {"day": "Daily", "week": "Weekly"}[period]
+        self._attr_name = f"RTT API {label} Usage"
+        self._attr_unique_id = f"rtt_api_{label.lower()}_usage"
+        self._tracker.update_callbacks.append(self._on_api_call)
+
+    def _on_api_call(self) -> None:
+        if self.hass:
+            self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> float | None:
+        limits = self._tracker.rate_limits.get(self._period, {})
+        limit = limits.get("limit")
+        remaining = limits.get("remaining")
+        if not limit or remaining is None:
+            return None
+        return round(100 * (limit - remaining) / limit, 1)
 
 
 class RealtimeTrainLiveTrainTimeSensor(SensorEntity):
